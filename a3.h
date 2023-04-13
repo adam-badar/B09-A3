@@ -1,7 +1,28 @@
 #ifndef __A3_header
 #define __A3_header
 
+#define MAX_LEN 1024
 
+// Struct for holding CPU info after piping 
+typedef struct {
+    char cpuString[MAX_LEN];
+    double prevTime;
+    double prevUtil;
+    double currCpu;
+} CpuStruct;
+
+// Struct for holding memory info after piping
+typedef struct {
+    char memString[MAX_LEN];
+    double prevMem;
+} MemStruct;
+
+typedef struct memory(
+    double total_virt;
+    double used_virt;
+    double total_mem;
+    double used_mem;
+)
 
 //struct to store cpu statistics
 struct cpu_stat {
@@ -20,9 +41,21 @@ double calculate_load(struct cpu_stat *prev, struct cpu_stat *cur);
 
 void userPrint();
 
-double cpuPrint(char **graph_arr, int tdelay, int samples, double prev_load, bool graph, int i);
+void getCpu(char cpuArray[1024], double *prevTime, double *currCpu, double *prevUtil, bool graphics, int i);
 
-double memoryPrint(char **memory_arr, int samples, bool graph, int i, double prev_virt);
+void cpuPrint(char **graph_arr, int tdelay, int samples, double cur_load, int i);
+
+void getMem(char **memory_arr, bool graph, int i, double *prev_virt);
+
+void memPrint(char **memory_arr, int samples, int graph, int i);
+
+void starter(int samples, int tdelay);
+
+void ender();
+
+void CtrlC(int signals);
+
+void CtrlZ(int signals);
 
 
 #endif

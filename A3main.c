@@ -14,115 +14,160 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
+
 #include "a3.h"
+#define MAX_LEN 1024 
 
 
-// Function to display the Number of samples and the time delay in seconds, and the memory usage
-void starter(int samples, int tdelay){
-    printf("Nbr of samples: %d -- every %d secs\n", samples, tdelay);
-    // Declare a structure to store memory usage information
-    struct rusage mem_use;
-    struct rusage *ptr = &mem_use;
-    // Use the getrusage() function to retrieve information about the memory usage of the calling process
-    if(getrusage(RUSAGE_SELF, ptr)==0){
-        printf(" Memory usage: %ld kilobytes\n", ptr->ru_maxrss);
-    }
-}
 
-// Function to display the system information
-void ender(){
-    printf("---------------------------------------\n");
-    printf("### System Information ### \n");
-    // Declare a structure to store system information
-    struct utsname utsname;
-    // Use the uname() function to fill the structure with information about the system
-    uname(&utsname);
-    // Display the relevant system information
-    printf(" System Name = %s\n", utsname.sysname);
-    printf(" Machine Name = %s\n", utsname.nodename);
-    printf(" Version = %s\n", utsname.version);
-    printf(" Release = %s\n", utsname.release);
-    printf(" Architecture = %s\n", utsname.machine);
-    printf("---------------------------------------\n");
-}
 
-//Function to handle ctrl+c
-void CtrlC(int signals){
-    char command;
-    signal(signals, SIG_IGN);
-    printf("Enter Y/y to quit, N/n to keep going!\n");
-    command = getchar();
-    if (command == 'y' || command == 'Y'){
-        exit(0);
-    }
-    else{
-        signal(SIGINT, CtrlC);
-    }
-}
-
-//Function to handle ctrl+z
-void CtrlZ(int signals){
-    //Do nothing
-}
 
 //Function to print all stats
 void finPrint(bool sys, bool user, bool graph, bool sequen, int samples, int tdelay){
     signal(SIGTSTP, CtrlZ);
     signal(SIGINT, CtrlC);
+    MemStruct memStruct;
+    CpuStruct cpuStruct;
     //declare arrays to store memory and cpu graphical usage
-    char **memory_arr = (char **) malloc(samples * sizeof(char *));
-    char **graph_arr = (char **) malloc(samples * sizeof(char *));
+    char memory_arr [samples][200];
+    char graph_arr[samples][200];
     for (int i = 0; i < samples; i++) {
-        memory_arr[i] = (char *) malloc(200 * sizeof(char));
-        graph_arr[i] = (char *) malloc(100 * sizeof(char));
         strcpy(memory_arr[i], "");
         strcpy(graph_arr[i], "");
     }
-    double prev_load = 0;
-    //prev_load = cpuPrint(graph_arr, tdelay, samples, prev_load, graph, -1);
-    double prev_virt = 0;
-    struct cpu_stat prev;
-    struct cpu_stat cur;
-    get_stats(&prev, -1);
-    sleep(tdelay);
-    get_stats(&cur, -1);
-    prev_load = calculate_load(&prev, &cur);
+    char mem_arr[MAX_LEN];
+    char cpu_arr[MAX_LEN];
+    char user_arr[MAX_LEN];
+   
+    int temp = 0;
     for (int i = 0; i < samples; i++)
     {
-        
+        pid_t pid[3];
+        int cpuPipe[2];
+        int memPipe[2];
+        int userPipe[2];
+        if(pipe(cpuPipe) != 0 || pipe(memPipe) != 0 || pipe(userPipe) != 0){
+            fprintf(stderr, "Pipe failed\n");
+            exit(1);
+        }
+        strcpy(mem_arr, "");
+        strcpy(user_arr, "");
+        strcpy(cpu_arr, "");
+        for(int j = 0; j < 3; j++){
+             if (j == 0) {
+                if ((pid[j] = fork()) == -1){
+                    fprintf(stderr, "Fork failed\n");
+                }
+                else if (pid[j] == 0) {
+                    close(cpuPipe[0]);
+                    getCpu(cpu_arr, &cpuStruct.prevTime, &cpuStruct.currCpu, &cpuStruct.prevUtil, graph, i);
+                    temp = write(cpuPipe[1], &cpuStruct, sizeof(cpuStruct));
+                    if (temp == -1){
+                        fprintf(stderr, "Write to pipe failed\n");
+                        exit(0);
+                    }
+                    close(cpuPipe[0]);
+                }
+                else {
+                    while(wait(NULL) > 0);
+                    close(cpuPipe[1]);
+                    temp = read(cpuPipe[0], &cpuStruct, sizeof(cpuStruct));
+                    if (temp == -1){
+                        fprintf(stderr, "Read from pipe failed\n");
+                        exit(0);
+                    }
+                    strcpy(graph_arr[i], cpuStruct.cpuString);
+                    close(cpuPipe[0]);
+                }
+            }
+            else if (j == 1) {
+                if ((pid[j] = fork()) == -1){
+                    fprintf(stderr, "Fork failed\n");
+                }
+                else if (pid[j] == 0) {
+                    close(memPipe[0]);
+                    getMem(memory_arr, graph, i, &memStruct.prevMem);
+                    temp = write(memPipe[1], &memStruct, sizeof(memStruct));
+                    if (temp == -1){
+                        fprintf(stderr, "Write to pipe failed\n");
+                        exit(0);
+                    }
+                    close(memPipe[1]);
+                }
+                else {
+                    while(wait(NULL) > 0);
+                    close(memPipe[1]);
+                    temp = read(memPipe[0], &memStruct, sizeof(memStruct));
+                    if (temp == -1){
+                        fprintf(stderr, "Read from pipe failed\n");
+                        exit(0);
+                    }
+                    strcpy(memory_arr[i], memStruct.memString);
+                    close(memPipe[0]);
+                }
+            }
+            else if (j == 2) {
+                if ((pid[j] = fork())== -1){
+                    fprintf(stderr, "Fork failed\n");
+                }
+                else if (pid[j]== 0) {
+                    close(userPipe[0]);
+                    userPrint(user_arr);
+                    temp = write(userPipe[1], user_arr, strlen(user_arr)+1);
+                    if (temp == -1){
+                        fprintf(stderr, "Write to pipe failed\n");
+                        exit(0);
+                    }
+                    close(userPipe[1]);
+                    
+                }
+                else {
+                    while(wait(NULL) > 0);
+                    close(userPipe[1]);
+                    temp = read(userPipe[0], &memStruct, sizeof(memStruct));
+                    if (temp == -1){
+                        fprintf(stderr, "Read from pipe failed\n");
+                        exit(0);
+                    }
+                    close(userPipe[0]);
+                }
+            }
+        }
+
         //if sequen is true, print iteration number
         if(sequen){
             printf(">>> iteration %d\n", i);
             starter(samples, tdelay);
             if(sys && !user){
-                prev_virt = memoryPrint(memory_arr, samples, graph, i, prev_virt);
-                prev_load = cpuPrint(graph_arr, tdelay, samples, prev_load, graph, i);
+                memPrint(memory_arr, samples, graph, i);
+                cpuPrint(graph_arr, tdelay, samples, cpuStruct.currCpu, i);
             }
             else if(user && !sys){
                 userPrint();
                 sleep(tdelay);
             }
             else if(user && sys){
-                prev_virt = memoryPrint(memory_arr, samples, graph, i, prev_virt);
+                memPrint(memory_arr, samples, graph, i);
                 userPrint();
-                prev_load = cpuPrint(graph_arr, tdelay, samples, prev_load, graph, i);
+                cpuPrint(graph_arr, tdelay, samples, cpuStruct.currCpu, i);
             }
         }
         else{
             printf("\033[H \033[2J \n");
             starter(samples, tdelay);
             if(sys && !user){
-                prev_virt = memoryPrint(memory_arr, samples, graph, i, prev_virt);
-                prev_load = cpuPrint(graph_arr, tdelay, samples, prev_load, graph, i);
+                memPrint(memory_arr, samples, graph, i);
+                cpuPrint(graph_arr, tdelay, samples, cpuStruct.currCpu, i);
             }
             else if(user && !sys){
                 userPrint();
                 sleep(tdelay);
             }
             else if(user && sys){
-                prev_virt = memoryPrint(memory_arr, samples, graph, i, prev_virt);
-                 userPrint();
-                prev_load = cpuPrint(graph_arr, tdelay, samples, prev_load, graph, i);      
+                memPrint(memory_arr, samples, graph, i);
+                
+                userPrint();
+                cpuPrint(graph_arr, tdelay, samples, cpuStruct.currCpu, i);     
             }
         }
     }
