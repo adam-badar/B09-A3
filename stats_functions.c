@@ -123,7 +123,7 @@ void cpuPrint(char graph_arr[][1024], int tdelay, int samples, bool graph, int i
 }
 
 void getMemory(int pipedf_mem[2]){
-    printf("getMemory start\n");
+    //printf("getMemory start\n");
     struct mem_stat* mem_stat;
 	// Function stores memory output in struct
 	struct sysinfo sys;
@@ -144,7 +144,7 @@ void getMemory(int pipedf_mem[2]){
         kill(getpid(), SIGTERM);
         kill(getppid(), SIGTERM);
     }
-    printf("getMemory end\n");
+    //printf("getMemory end\n");
     return;
 }
 
@@ -154,27 +154,26 @@ void memoryPrint(char memory_arr[][1024], int samples, bool graph, int i, double
     printf("---------------------------------------\n");
     printf("### Memory ### (Phys.Used/Tot -- Virtual Used/Tot) \n");
     // Declare a structure to store memory usage information
-
     double fin_phys_used = mem_stat -> used_memory;
     double fin_phys_mem = mem_stat -> total_memory;
     double fin_virt_used = mem_stat -> used_virtual;
     double fin_virt_mem = mem_stat -> total_virtual;
-    printf("checkers\n");
+   // printf("checkers\n");
     double virt_change = (double)(fin_virt_used - *prev_virt);
-    printf("check\n");
+    //printf("check\n");
     // virt_change = virt_change - (int)virt_change * 100;
     char str[200];
     char sep[200];
     char mem[200];
     char symbols[200];
     //Ensure all arrays are empty
-    printf("check0\n");
+    //printf("check0\n");
 
     memset(str, '\0', sizeof(str));
     memset(sep, '\0', sizeof(sep));
     memset(symbols, '\0', sizeof(symbols));
 
-    printf("check1\n");
+   // printf("check1\n");
 
     if(graph) {sprintf(mem, "%.2f GB / %.2f GB  -- %.2f GB / %.2f GB", fin_phys_used, fin_phys_mem, fin_virt_used, fin_virt_mem);}
     else {sprintf(mem, "%.2f GB / %.2f GB  -- %.2f GB / %.2f GB\n", fin_phys_used, fin_phys_mem, fin_virt_used, fin_virt_mem);}
@@ -211,9 +210,9 @@ void memoryPrint(char memory_arr[][1024], int samples, bool graph, int i, double
         }
         
     }
-    printf("check2\n");
+  //  printf("check2\n");
     strcpy(memory_arr[i], mem);
-    printf("check3\n");
+   // printf("check3\n");
     //print memory array
     for (int j = 0; j < samples; j++)
     {
@@ -223,7 +222,7 @@ void memoryPrint(char memory_arr[][1024], int samples, bool graph, int i, double
     {
         printf("\n");
     }  
-    printf("memoryPrint end\n");  
+ //   printf("memoryPrint end\n");  
 }
 
 

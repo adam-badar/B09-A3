@@ -43,10 +43,10 @@ void finPrint(bool sys, bool user, bool graph, bool sequen, int samples, int tde
     int pipefd_memory[2], pipefd_cpu[2], pipefd_user[2];
 
     //declare arrays to store memory and cpu graphical usage
-    char memory_arr[samples][1024];
-    char graph_arr[samples][1024];
+    char memory_arr[1024][1024];
+    char graph_arr[1024][1024];
 
-    double prev_virt;
+    double prev_virt = 0;
     long int prev_cpu = 0;
     long int prev_idle = 0;
 
@@ -58,7 +58,7 @@ void finPrint(bool sys, bool user, bool graph, bool sequen, int samples, int tde
                 exit(1);
             }
 
-            pid_t pid_memory = fork();
+        pid_t pid_memory = fork();
 
         if (pid_memory == -1){
             fprintf(stderr, "Unable to fork (%s)\n", strerror(errno));
@@ -68,9 +68,11 @@ void finPrint(bool sys, bool user, bool graph, bool sequen, int samples, int tde
         else if (pid_memory == 0) {
             // Child process
             close(pipefd_memory[0]); // Close unused read 
-            close(pipefd_cpu[0]); close(pipefd_cpu[1]); close(pipefd_user[0]); close(pipefd_user[1]); 
+            close(pipefd_cpu[0]); 
+            close(pipefd_cpu[1]); 
+            close(pipefd_user[0]); 
+            close(pipefd_user[1]); 
             dup2(pipefd_memory[1], STDOUT_FILENO); // Redirect stdout to the pipe
-                
             // Call Memory Function
             getMemory(pipefd_memory);
             exit(0);
@@ -125,8 +127,13 @@ void finPrint(bool sys, bool user, bool graph, bool sequen, int samples, int tde
                             printf(">>> iteration %d\n", i);
                             starter(samples, tdelay);
                             if(sys){
-                                struct mem_stat* mem;
-                                struct cpu_stat* cpu;
+                                struct mem_stat* mem = (struct mem_stat*) malloc(sizeof(struct mem_stat));
+                                struct cpu_stat* cpu = (struct cpu_stat*) malloc(sizeof(struct cpu_stat));
+                                if (mem == NULL || cpu == NULL) {
+                                    // Handle memory allocation failure
+                                    printf("Memory allocation failed.\n");
+                                    exit(1);
+                                }
                                 read(pipefd_memory[0], mem, sizeof(struct mem_stat));
                                 read(pipefd_cpu[0], cpu, sizeof(struct cpu_stat));
                                 memoryPrint(memory_arr, samples, graph, i, &prev_virt, mem);
@@ -138,8 +145,13 @@ void finPrint(bool sys, bool user, bool graph, bool sequen, int samples, int tde
                                 sleep(tdelay);
                             }
                             else if(user && sys){
-                                struct mem_stat* mem;
-                                struct cpu_stat* cpu;
+                                struct mem_stat* mem = (struct mem_stat*) malloc(sizeof(struct mem_stat));
+                                struct cpu_stat* cpu = (struct cpu_stat*) malloc(sizeof(struct cpu_stat));
+                                if (mem == NULL || cpu == NULL) {
+                                    // Handle memory allocation failure
+                                    printf("Memory allocation failed.\n");
+                                    exit(1);
+                                }
                                 read(pipefd_memory[0], mem, sizeof(struct mem_stat));
                                 read(pipefd_cpu[0], cpu, sizeof(struct cpu_stat));
                                 memoryPrint(memory_arr, samples, graph, i, &prev_virt, mem);
@@ -152,8 +164,13 @@ void finPrint(bool sys, bool user, bool graph, bool sequen, int samples, int tde
                             printf("\033[H \033[2J \n");
                             starter(samples, tdelay);
                             if(sys && !user){
-                                struct mem_stat* mem;
-                                struct cpu_stat* cpu;
+                                struct mem_stat* mem = (struct mem_stat*) malloc(sizeof(struct mem_stat));
+                                struct cpu_stat* cpu = (struct cpu_stat*) malloc(sizeof(struct cpu_stat));
+                                if (mem == NULL || cpu == NULL) {
+                                    // Handle memory allocation failure
+                                    printf("Memory allocation failed.\n");
+                                    exit(1);
+                                }
                                 read(pipefd_memory[0], mem, sizeof(struct mem_stat));
                                 read(pipefd_cpu[0], cpu, sizeof(struct cpu_stat));
                                 memoryPrint(memory_arr, samples, graph, i, &prev_virt, mem);
@@ -166,8 +183,13 @@ void finPrint(bool sys, bool user, bool graph, bool sequen, int samples, int tde
                             }
                             else if(user && sys){
                                 
-                                struct mem_stat* mem;
-                                struct cpu_stat* cpu;
+                                struct mem_stat* mem = (struct mem_stat*) malloc(sizeof(struct mem_stat));
+                                struct cpu_stat* cpu = (struct cpu_stat*) malloc(sizeof(struct cpu_stat));
+                                if (mem == NULL || cpu == NULL) {
+                                    // Handle memory allocation failure
+                                    printf("Memory allocation failed.\n");
+                                    exit(1);
+                                }
                                 read(pipefd_memory[0], mem, sizeof(struct mem_stat));
                                 read(pipefd_cpu[0], cpu, sizeof(struct cpu_stat));
                                 memoryPrint(memory_arr, samples, graph, i, &prev_virt, mem);
@@ -175,7 +197,9 @@ void finPrint(bool sys, bool user, bool graph, bool sequen, int samples, int tde
                                 close(pipefd_memory[0]);
                                 //userPrint();
                                 cpuPrint(graph_arr, tdelay, samples, graph, i, &prev_cpu, &prev_idle, cpu);
-                                close(pipefd_cpu[0]);  close(pipefd_user[0]);      
+                                close(pipefd_cpu[0]);  close(pipefd_user[0]);  
+                                free(mem);
+                                free(cpu);    
                             }
                         }
                         sleep(tdelay);
