@@ -3,27 +3,6 @@
 
 #define MAX_LEN 1024
 
-// Struct for holding CPU info after piping 
-typedef struct {
-    char cpuString[MAX_LEN];
-    double prevTime;
-    double prevUtil;
-    double currCpu;
-} CpuStruct;
-
-// Struct for holding memory info after piping
-typedef struct {
-    char memString[MAX_LEN];
-    double prevMem;
-} MemStruct;
-
-typedef struct memory(
-    double total_virt;
-    double used_virt;
-    double total_mem;
-    double used_mem;
-)
-
 //struct to store cpu statistics
 struct cpu_stat {
     long int cpu_user;
@@ -35,27 +14,31 @@ struct cpu_stat {
     long int cpu_softirq;
 };
 
-void get_stats(struct cpu_stat *cpu, int cpunum);
 
-double calculate_load(struct cpu_stat *prev, struct cpu_stat *cur);
+// struct to store memory statistics
+struct mem_stat {
+    double total_memory;
+    double used_memory;
+    double total_virtual;
+    double used_virtual;
+};
 
-void userPrint();
+void getCpu(int pipefd_cpu[2]);
 
-void getCpu(char cpuArray[1024], double *prevTime, double *currCpu, double *prevUtil, bool graphics, int i);
-
-void cpuPrint(char **graph_arr, int tdelay, int samples, double cur_load, int i);
-
-void getMem(char **memory_arr, bool graph, int i, double *prev_virt);
-
-void memPrint(char **memory_arr, int samples, int graph, int i);
+double calculate_load(struct cpu_stat *cur, long int* prev_idle, long int* prev_load);
 
 void starter(int samples, int tdelay);
 
 void ender();
 
-void CtrlC(int signals);
+void starter(int samples, int tdelay);
 
-void CtrlZ(int signals);
+void userPrint(int pipefd[2]);
 
+void cpuPrint(char graph_arr[][1024], int tdelay, int samples, bool graph, int i, long int* prev_idle, long int* prev_load, struct cpu_stat *cpu_stat);
+
+void getMemory(int pipedf_mem[2]);
+
+void memoryPrint(char memory_arr[][1024], int samples, bool graph, int i, double* prev_virt, struct mem_stat *mem_stat);
 
 #endif

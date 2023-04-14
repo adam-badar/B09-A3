@@ -13,177 +13,174 @@
 #include  <signal.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <errno.h>
 
 
 #include "a3.h"
 #define MAX_LEN 1024 
 
-
-
-
+void INThandler(int sig)
+{
+    char c;
+    signal(sig, SIG_IGN);
+    printf("Do you really want to quit? [y/n]");
+    c = getchar();
+    if (c == 'y' || c == 'Y')
+        exit(0);
+    else
+        signal(SIGINT, INThandler);
+    getchar(); // Get new line character
+}
+void interceptZ(int signal) {
+    // intercept ctrl-z
+}
 
 //Function to print all stats
 void finPrint(bool sys, bool user, bool graph, bool sequen, int samples, int tdelay){
-    signal(SIGTSTP, CtrlZ);
-    signal(SIGINT, CtrlC);
-    MemStruct memStruct;
-    CpuStruct cpuStruct;
+    
+	
+    // Create Pipes
+    int pipefd_memory[2], pipefd_cpu[2], pipefd_user[2];
+
     //declare arrays to store memory and cpu graphical usage
-    char memory_arr [samples][200];
-    char graph_arr[samples][200];
-    for (int i = 0; i < samples; i++) {
-        strcpy(memory_arr[i], "");
-        strcpy(graph_arr[i], "");
-    }
-    char mem_arr[MAX_LEN];
-    char cpu_arr[MAX_LEN];
-    char user_arr[MAX_LEN];
-   
-    int temp = 0;
+    char memory_arr[samples][1024];
+    char graph_arr[samples][1024];
+
+    double prev_virt;
+    long int prev_cpu = 0;
+    long int prev_idle = 0;
+
     for (int i = 0; i < samples; i++)
     {
-        pid_t pid[3];
-        int cpuPipe[2];
-        int memPipe[2];
-        int userPipe[2];
-        if(pipe(cpuPipe) != 0 || pipe(memPipe) != 0 || pipe(userPipe) != 0){
-            fprintf(stderr, "Pipe failed\n");
+	    
+        if (pipe(pipefd_memory) == -1 || pipe(pipefd_cpu) == -1 || pipe(pipefd_user) == -1) {
+                fprintf(stderr, "Unable to create pipe (%s)\n", strerror(errno));
+                exit(1);
+            }
+
+            pid_t pid_memory = fork();
+
+        if (pid_memory == -1){
+            fprintf(stderr, "Unable to fork (%s)\n", strerror(errno));
             exit(1);
         }
-        strcpy(mem_arr, "");
-        strcpy(user_arr, "");
-        strcpy(cpu_arr, "");
-        for(int j = 0; j < 3; j++){
-             if (j == 0) {
-                if ((pid[j] = fork()) == -1){
-                    fprintf(stderr, "Fork failed\n");
-                }
-                else if (pid[j] == 0) {
-                    close(cpuPipe[0]);
-                    getCpu(cpu_arr, &cpuStruct.prevTime, &cpuStruct.currCpu, &cpuStruct.prevUtil, graph, i);
-                    temp = write(cpuPipe[1], &cpuStruct, sizeof(cpuStruct));
-                    if (temp == -1){
-                        fprintf(stderr, "Write to pipe failed\n");
-                        exit(0);
-                    }
-                    close(cpuPipe[0]);
-                }
-                else {
-                    while(wait(NULL) > 0);
-                    close(cpuPipe[1]);
-                    temp = read(cpuPipe[0], &cpuStruct, sizeof(cpuStruct));
-                    if (temp == -1){
-                        fprintf(stderr, "Read from pipe failed\n");
-                        exit(0);
-                    }
-                    strcpy(graph_arr[i], cpuStruct.cpuString);
-                    close(cpuPipe[0]);
-                }
-            }
-            else if (j == 1) {
-                if ((pid[j] = fork()) == -1){
-                    fprintf(stderr, "Fork failed\n");
-                }
-                else if (pid[j] == 0) {
-                    close(memPipe[0]);
-                    getMem(memory_arr, graph, i, &memStruct.prevMem);
-                    temp = write(memPipe[1], &memStruct, sizeof(memStruct));
-                    if (temp == -1){
-                        fprintf(stderr, "Write to pipe failed\n");
-                        exit(0);
-                    }
-                    close(memPipe[1]);
-                }
-                else {
-                    while(wait(NULL) > 0);
-                    close(memPipe[1]);
-                    temp = read(memPipe[0], &memStruct, sizeof(memStruct));
-                    if (temp == -1){
-                        fprintf(stderr, "Read from pipe failed\n");
-                        exit(0);
-                    }
-                    strcpy(memory_arr[i], memStruct.memString);
-                    close(memPipe[0]);
-                }
-            }
-            else if (j == 2) {
-                if ((pid[j] = fork())== -1){
-                    fprintf(stderr, "Fork failed\n");
-                }
-                else if (pid[j]== 0) {
-                    close(userPipe[0]);
-                    userPrint(user_arr);
-                    temp = write(userPipe[1], user_arr, strlen(user_arr)+1);
-                    if (temp == -1){
-                        fprintf(stderr, "Write to pipe failed\n");
-                        exit(0);
-                    }
-                    close(userPipe[1]);
-                    
-                }
-                else {
-                    while(wait(NULL) > 0);
-                    close(userPipe[1]);
-                    temp = read(userPipe[0], &memStruct, sizeof(memStruct));
-                    if (temp == -1){
-                        fprintf(stderr, "Read from pipe failed\n");
-                        exit(0);
-                    }
-                    close(userPipe[0]);
-                }
-            }
-        }
-
-        //if sequen is true, print iteration number
-        if(sequen){
-            printf(">>> iteration %d\n", i);
-            starter(samples, tdelay);
-            if(sys && !user){
-                memPrint(memory_arr, samples, graph, i);
-                cpuPrint(graph_arr, tdelay, samples, cpuStruct.currCpu, i);
-            }
-            else if(user && !sys){
-                userPrint();
-                sleep(tdelay);
-            }
-            else if(user && sys){
-                memPrint(memory_arr, samples, graph, i);
-                userPrint();
-                cpuPrint(graph_arr, tdelay, samples, cpuStruct.currCpu, i);
-            }
-        }
-        else{
-            printf("\033[H \033[2J \n");
-            starter(samples, tdelay);
-            if(sys && !user){
-                memPrint(memory_arr, samples, graph, i);
-                cpuPrint(graph_arr, tdelay, samples, cpuStruct.currCpu, i);
-            }
-            else if(user && !sys){
-                userPrint();
-                sleep(tdelay);
-            }
-            else if(user && sys){
-                memPrint(memory_arr, samples, graph, i);
+	    
+        else if (pid_memory == 0) {
+            // Child process
+            close(pipefd_memory[0]); // Close unused read 
+            close(pipefd_cpu[0]); close(pipefd_cpu[1]); close(pipefd_user[0]); close(pipefd_user[1]); 
+            dup2(pipefd_memory[1], STDOUT_FILENO); // Redirect stdout to the pipe
                 
-                userPrint();
-                cpuPrint(graph_arr, tdelay, samples, cpuStruct.currCpu, i);     
+            // Call Memory Function
+            getMemory(pipefd_memory);
+            exit(0);
+            } 
+        else {
+
+            pid_t pid_users = fork();
+            if(pid_users == -1){
+                fprintf(stderr, "Unable to fork (%s)\n", strerror(errno));
+                exit(1);
+            }
+
+            if (pid_users == 0) {
+                // Child process
+                close(pipefd_user[0]); // Close unused read 
+                close(pipefd_memory[0]); close(pipefd_memory[1]); close(pipefd_cpu[0]); close(pipefd_cpu[1]); 
+                
+                // Call Users Function
+                userPrint(pipefd_user);
+                exit(0);
+                } 
+                else {
+
+                    pid_t pid_cpu = fork();
+                    if (pid_cpu == -1)
+                    {
+                        fprintf(stderr, "Unable to fork (%s)\n", strerror(errno));
+                        exit(1);
+                    }
+                   
+                   else if (pid_cpu == 0) {
+                            // Child process
+                        close(pipefd_cpu[0]); // Close unused read 
+                        close(pipefd_memory[0]); close(pipefd_memory[1]); close(pipefd_user[0]); close(pipefd_user[1]); 
+                        dup2(pipefd_cpu[1], STDOUT_FILENO); // Redirect stdout to the pipe
+                    
+                        // Call Cpu Function
+                        getCpu(pipefd_cpu);
+                        exit(0);
+                        } 
+                    else {
+                        // Main partent Process
+                        // Close the write end of the pipe for the parent
+                        close(pipefd_cpu[1]); close(pipefd_memory[1]); close(pipefd_user[1]);
+                        // Wait for information retrival
+                        waitpid(pid_memory, NULL, 0);
+                        waitpid(pid_users, NULL, 0);
+                        waitpid(pid_cpu, NULL, 0);
+
+                        //if sequen is true, print iteration number
+                        if(sequen){
+                            printf(">>> iteration %d\n", i);
+                            starter(samples, tdelay);
+                            if(sys){
+                                struct mem_stat* mem;
+                                
+                                memoryPrint(memory_arr, samples, graph, i, &prev_virt, mem);
+                                cpuPrint(graph_arr, tdelay, samples, graph, i, &prev_cpu, &prev_idle, cpu);
+                                close(pipefd_cpu[0]); close(pipefd_memory[0]); close(pipefd_user[0]);
+                            }
+                            else if(user && !sys){
+                                //userPrint();
+                                sleep(tdelay);
+                            }
+                            else if(user && sys){
+                                struct mem_stat* mem;
+                                struct cpu_stat* cpu;
+                                memoryPrint(memory_arr, samples, graph, i, &prev_virt, mem);
+                                //userPrint();
+                                cpuPrint(graph_arr, tdelay, samples, graph, i, &prev_cpu, &prev_idle, cpu);
+                                close(pipefd_cpu[0]); close(pipefd_memory[0]); close(pipefd_user[0]);
+                            }
+                        }
+                        else{
+                            printf("\033[H \033[2J \n");
+                            starter(samples, tdelay);
+                            if(sys && !user){
+                                struct mem_stat* mem;
+                                struct cpu_stat* cpu;
+                                memoryPrint(memory_arr, samples, graph, i, &prev_virt, mem);
+                                cpuPrint(graph_arr, tdelay, samples, graph, i, &prev_cpu, &prev_idle, cpu);
+                                close(pipefd_cpu[0]); close(pipefd_memory[0]); close(pipefd_user[0]);
+                            }
+                            else if(user && !sys){
+                                //userPrint();
+                                sleep(tdelay);
+                            }
+                            else if(user && sys){
+                                struct mem_stat* mem;
+                                struct cpu_stat* cpu;
+                                memoryPrint(memory_arr, samples, graph, i, &prev_virt, mem);
+                                close(pipefd_memory[0]);
+                                //userPrint();
+                                cpuPrint(graph_arr, tdelay, samples, graph, i, &prev_cpu, &prev_idle, cpu);
+                                close(pipefd_cpu[0]);  close(pipefd_user[0]);      
+                            }
+                        }
+                        sleep(tdelay);
+                        ender();
+                }
             }
         }
-    }
-    ender();
-    //free memory
-    for (int i = 0; i < samples; i++) {
-        free(memory_arr[i]);
-        free(graph_arr[i]);
-    }
-    free(memory_arr);
-    free(graph_arr);
+    }    
 }
 
 
 //Main function where arguments are parsed
 int main(int argc, char *argv[]){
+    signal(SIGTSTP, interceptZ);
+    signal(SIGINT, INThandler);
     int samples = 10, tdelay = 1;
     //default values
     bool sys = true, user = true, graph = false, sequen = false;
@@ -233,4 +230,3 @@ int main(int argc, char *argv[]){
 
     return 0;
 }
-
