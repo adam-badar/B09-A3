@@ -27,7 +27,7 @@ void getCpu(int pipefd_cpu[2]){
     FILE *fp = fopen("/proc/stat", "r");
     char cpu_n[255];
     // Declare a structure to store CPU statistics
-    struct cpu_stat *cpu;
+    struct cpu_stat *cpu = (struct cpu_stat*) malloc(sizeof(struct cpu_stat));
     // Read CPU statistics from file
     fscanf(fp, "%s %ld %ld %ld %ld %ld %ld %ld", cpu_n, &(cpu->cpu_user), &(cpu->cpu_nice), 
         &(cpu->cpu_system), &(cpu->cpu_idle), &(cpu->cpu_iowait), &(cpu->cpu_irq),
@@ -36,6 +36,7 @@ void getCpu(int pipefd_cpu[2]){
     fclose(fp);
     // Write the CPU statistics to the pipe
     int cpu_write = write(pipefd_cpu[1], cpu, sizeof(struct cpu_stat));
+    free(cpu);
     if (cpu_write == -1){
         fprintf(stderr, "Unable to write to pipe (%s)\n", strerror(errno));
         exit(1);
@@ -86,7 +87,7 @@ void userPrint(int pipefd[2]){
 }
 
 //Function to display the memory usage of the system.
-void cpuPrint(char graph_arr[][1024], int tdelay, int samples, bool graph, int i, long int* prev_idle, long int* prev_cpu_load, struct cpu_stat *cpu_stat) {
+void cpuPrint(char graph_arr[][1024], int samples, bool graph, int i, long int* prev_idle, long int* prev_cpu_load, struct cpu_stat *cpu_stat) {
         double prev_load = calculate_load(cpu_stat, prev_idle, prev_cpu_load);
         if (i != -1) {
             int core = sysconf(_SC_NPROCESSORS_ONLN);
@@ -124,42 +125,50 @@ void cpuPrint(char graph_arr[][1024], int tdelay, int samples, bool graph, int i
 
 void getMemory(int pipedf_mem[2]){
     //printf("getMemory start\n");
-    struct mem_stat* mem_stat;
+    struct mem_stat* mem_stat = (struct mem_stat*) malloc(sizeof(struct mem_stat));
+    if (mem_stat == NULL) {
+    // Handle memory allocation failure
+    printf("Memory allocation failed.\n");
+    exit(1);
+    }
+    // Initialize mem_stat struct to zero
+    memset(mem_stat, 0, sizeof(struct mem_stat));
 	// Function stores memory output in struct
 	struct sysinfo sys;
     sysinfo(&sys);
-    double virt_change = 0;
     long long phys_mem = sys.totalram * sys.mem_unit;
     long long phys_used = (sys.totalram - sys.freeram) * sys.mem_unit;
     long long virt_mem = sys.totalram * sys.mem_unit + sys.totalswap * sys.mem_unit;
     long long virt_used = (sys.totalram - sys.freeram) * sys.mem_unit + (sys.totalswap - sys.freeswap) * sys.mem_unit;
     //convert to GB
-    mem_stat -> used_memory = (double)phys_used / (1024 * 1024 * 1024);
-    mem_stat -> total_memory = (double)phys_mem / (1024 * 1024 * 1024);
-    mem_stat -> used_virtual = (double)virt_used / (1024 * 1024 * 1024);
-    mem_stat -> total_virtual = (double)virt_mem / (1024 * 1024 * 1024);
+    mem_stat -> used_mem = (double)phys_used / (1024 * 1024 * 1024);
+    mem_stat -> total_mem = (double)phys_mem / (1024 * 1024 * 1024);
+    mem_stat -> used_virt = (double)virt_used / (1024 * 1024 * 1024);
+    mem_stat -> total_virt = (double)virt_mem / (1024 * 1024 * 1024);
 
-    int mem_write = write(pipedf_mem[1], &mem_stat, sizeof(mem_stat));
+    ssize_t mem_write = write(pipedf_mem[1], mem_stat, sizeof(struct mem_stat));
+    
+    free(mem_stat);
     if (mem_write == -1){
-        kill(getpid(), SIGTERM);
-        kill(getppid(), SIGTERM);
+        printf("Error writing to pipe\n");
+        exit(1);
     }
     //printf("getMemory end\n");
-    return;
 }
 
 
-void memoryPrint(char memory_arr[][1024], int samples, bool graph, int i, double* prev_virt, struct mem_stat *mem_stat){
-    printf("memoryPrint start\n");
+void memoryPrint(char memory_arr[1024][1024], int samples, bool graph, int i, double* prev_virt, struct mem_stat *mem_stat){
+    //printf("memoryPrint start\n");
     printf("---------------------------------------\n");
     printf("### Memory ### (Phys.Used/Tot -- Virtual Used/Tot) \n");
     // Declare a structure to store memory usage information
-    double fin_phys_used = mem_stat -> used_memory;
-    double fin_phys_mem = mem_stat -> total_memory;
-    double fin_virt_used = mem_stat -> used_virtual;
-    double fin_virt_mem = mem_stat -> total_virtual;
+    double fin_phys_used = mem_stat -> used_mem;
+    double fin_phys_mem = mem_stat -> total_mem;
+    double fin_virt_used = mem_stat -> used_virt;
+    double fin_virt_mem = mem_stat -> total_virt;
    // printf("checkers\n");
     double virt_change = (double)(fin_virt_used - *prev_virt);
+    *prev_virt = fin_virt_used;
     //printf("check\n");
     // virt_change = virt_change - (int)virt_change * 100;
     char str[200];
@@ -177,7 +186,6 @@ void memoryPrint(char memory_arr[][1024], int samples, bool graph, int i, double
 
     if(graph) {sprintf(mem, "%.2f GB / %.2f GB  -- %.2f GB / %.2f GB", fin_phys_used, fin_phys_mem, fin_virt_used, fin_virt_mem);}
     else {sprintf(mem, "%.2f GB / %.2f GB  -- %.2f GB / %.2f GB\n", fin_phys_used, fin_phys_mem, fin_virt_used, fin_virt_mem);}
-    
     if (graph)
     {
         //skip first iteration
@@ -196,7 +204,7 @@ void memoryPrint(char memory_arr[][1024], int samples, bool graph, int i, double
             else {
                 strcat(str, "    |");
                 //for each 0.01 change, add a symbol
-                memset(symbols, ':', (int)abs(((double)virt_change* 100)));
+                memset(symbols, ':', (int)fabs(((double)virt_change* 100)));
                 strcat(str, symbols);
                 sprintf(sep, "@ %.2f  (%.2f)\n", fabs(virt_change), fin_virt_used);
             }
@@ -212,6 +220,7 @@ void memoryPrint(char memory_arr[][1024], int samples, bool graph, int i, double
     }
   //  printf("check2\n");
     strcpy(memory_arr[i], mem);
+   
    // printf("check3\n");
     //print memory array
     for (int j = 0; j < samples; j++)
