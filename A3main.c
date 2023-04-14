@@ -126,7 +126,9 @@ void finPrint(bool sys, bool user, bool graph, bool sequen, int samples, int tde
                             starter(samples, tdelay);
                             if(sys){
                                 struct mem_stat* mem;
-                                
+                                struct cpu_stat* cpu;
+                                read(pipefd_memory[0], mem, sizeof(struct mem_stat));
+                                read(pipefd_cpu[0], cpu, sizeof(struct cpu_stat));
                                 memoryPrint(memory_arr, samples, graph, i, &prev_virt, mem);
                                 cpuPrint(graph_arr, tdelay, samples, graph, i, &prev_cpu, &prev_idle, cpu);
                                 close(pipefd_cpu[0]); close(pipefd_memory[0]); close(pipefd_user[0]);
@@ -138,6 +140,8 @@ void finPrint(bool sys, bool user, bool graph, bool sequen, int samples, int tde
                             else if(user && sys){
                                 struct mem_stat* mem;
                                 struct cpu_stat* cpu;
+                                read(pipefd_memory[0], mem, sizeof(struct mem_stat));
+                                read(pipefd_cpu[0], cpu, sizeof(struct cpu_stat));
                                 memoryPrint(memory_arr, samples, graph, i, &prev_virt, mem);
                                 //userPrint();
                                 cpuPrint(graph_arr, tdelay, samples, graph, i, &prev_cpu, &prev_idle, cpu);
@@ -150,6 +154,8 @@ void finPrint(bool sys, bool user, bool graph, bool sequen, int samples, int tde
                             if(sys && !user){
                                 struct mem_stat* mem;
                                 struct cpu_stat* cpu;
+                                read(pipefd_memory[0], mem, sizeof(struct mem_stat));
+                                read(pipefd_cpu[0], cpu, sizeof(struct cpu_stat));
                                 memoryPrint(memory_arr, samples, graph, i, &prev_virt, mem);
                                 cpuPrint(graph_arr, tdelay, samples, graph, i, &prev_cpu, &prev_idle, cpu);
                                 close(pipefd_cpu[0]); close(pipefd_memory[0]); close(pipefd_user[0]);
@@ -159,9 +165,13 @@ void finPrint(bool sys, bool user, bool graph, bool sequen, int samples, int tde
                                 sleep(tdelay);
                             }
                             else if(user && sys){
+                                
                                 struct mem_stat* mem;
                                 struct cpu_stat* cpu;
+                                read(pipefd_memory[0], mem, sizeof(struct mem_stat));
+                                read(pipefd_cpu[0], cpu, sizeof(struct cpu_stat));
                                 memoryPrint(memory_arr, samples, graph, i, &prev_virt, mem);
+                                //printf(">>> iteration %d\n", i);
                                 close(pipefd_memory[0]);
                                 //userPrint();
                                 cpuPrint(graph_arr, tdelay, samples, graph, i, &prev_cpu, &prev_idle, cpu);
